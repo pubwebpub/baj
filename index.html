@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mi a baj, Manó?</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;600;700&family=Pacifico&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Quicksand', sans-serif;
+            overflow: hidden;
+        }
+
+        .main-text {
+            font-family: 'Pacifico', cursive;
+            text-shadow: 2px 2px 8px rgba(0, 0, 0, 0.1);
+            user-select: none;
+            -webkit-user-select: none;
+            cursor: pointer;
+        }
+
+        .heart {
+            position: absolute;
+            animation: float-up 2s ease-out forwards;
+            pointer-events: none;
+            font-size: 24px;
+            opacity: 0;
+        }
+
+        @keyframes float-up {
+            0% {
+                transform: translateY(0) scale(0);
+                opacity: 1;
+            }
+            100% {
+                transform: translateY(-200px) scale(1.5);
+                opacity: 0;
+            }
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+        }
+
+        .pulse {
+            animation: pulse 0.5s ease-in-out;
+        }
+
+        @keyframes rainbow {
+            0% { filter: hue-rotate(0deg); }
+            100% { filter: hue-rotate(360deg); }
+        }
+
+        .rainbow {
+            animation: rainbow 2s linear infinite;
+        }
+
+        .message {
+            font-family: 'Quicksand', sans-serif;
+            animation: fadeInOut 5s ease-in-out forwards;
+        }
+
+        @keyframes fadeInOut {
+            0% { opacity: 0; transform: translateY(20px); }
+            20% { opacity: 1; transform: translateY(0); }
+            80% { opacity: 1; transform: translateY(0); }
+            100% { opacity: 0; transform: translateY(-20px); }
+        }
+
+        canvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            pointer-events: none;
+            z-index: 9999;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex items-center justify-center bg-gradient-to-br from-pink-200 via-purple-200 to-indigo-200 transition-all duration-1000">
+
+    <canvas id="confetti-canvas"></canvas>
+
+    <div class="text-center p-8">
+        <h1 id="main-text" class="main-text text-5xl md:text-7xl lg:text-8xl text-white mb-8 transition-all duration-300">
+            Mi a baj, Manó?
+        </h1>
+        <div id="message-container" class="h-12"></div>
+    </div>
+
+    <script>
+        const mainText = document.getElementById('main-text');
+        const messageContainer = document.getElementById('message-container');
+        const body = document.body;
+        const canvas = document.getElementById('confetti-canvas');
+        const ctx = canvas.getContext('2d');
+
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+
+        let clickCount = 0;
+        let lastClickTime = 0;
+        let confettiParticles = [];
+
+        // Hangok létrehozása Web Audio API-val
+        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+
+        function playSound(frequency, duration, type = 'sine') {
+            const oscillator = audioContext.createOscillator();
+            const gainNode = audioContext.createGain();
+
+            oscillator.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+
+            oscillator.frequency.value = frequency;
+            oscillator.type = type;
+
+            gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + duration);
+
+            oscillator.start(audioContext.currentTime);
+            oscillator.stop(audioContext.currentTime + duration);
+        }
+
+        function createHeart(x, y) {
+            const heart = document.createElement('div');
+            heart.className = 'heart';
+            heart.textContent = ['💕', '💖', '💗', '💓', '💝'][Math.floor(Math.random() * 5)];
+            heart.style.left = x + 'px';
+            heart.style.top = y + 'px';
+            document.body.appendChild(heart);
+
+            setTimeout(() => heart.remove(), 2000);
+        }
+
+        class ConfettiParticle {
+            constructor(x, y, intensity = 1) {
+                this.x = x;
+                this.y = y;
+                this.size = Math.random() * 8 * intensity + 3;
+                this.speedX = (Math.random() - 0.5) * 8 * intensity;
+                this.speedY = Math.random() * -15 * intensity - 5;
+                this.gravity = 0.5;
+                this.colors = ['#FFB6C1', '#DDA0DD', '#E6E6FA', '#FFD700', '#FFA07A', '#FF69B4'];
+                this.color = this.colors[Math.floor(Math.random() * this.colors.length)];
+                this.rotation = Math.random() * 360;
+                this.rotationSpeed = (Math.random() - 0.5) * 10;
+                this.opacity = 1;
+            }
+
+            update() {
+                this.x += this.speedX;
+                this.y += this.speedY;
+                this.speedY += this.gravity;
+                this.rotation += this.rotationSpeed;
+
+                if (this.y > canvas.height) {
+                    this.opacity -= 0.05;
+                }
+            }
+
+            draw() {
+                ctx.save();
+                ctx.translate(this.x, this.y);
+                ctx.rotate(this.rotation * Math.PI / 180);
+                ctx.globalAlpha = this.opacity;
+                ctx.fillStyle = this.color;
+                ctx.fillRect(-this.size / 2, -this.size / 2, this.size, this.size);
+                ctx.restore();
+            }
+        }
+
+        function createConfetti(x, y, amount = 50, intensity = 1) {
+            for (let i = 0; i < amount; i++) {
+                confettiParticles.push(new ConfettiParticle(x, y, intensity));
+            }
+        }
+
+        function animateConfetti() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            confettiParticles = confettiParticles.filter(p => p.opacity > 0);
+
+            confettiParticles.forEach(particle => {
+                particle.update();
+                particle.draw();
+            });
+
+            if (confettiParticles.length > 0) {
+                requestAnimationFrame(animateConfetti);
+            }
+        }
+
+        function showMessage(text) {
+            const message = document.createElement('div');
+            message.className = 'message text-2xl md:text-3xl text-white font-semibold';
+            message.textContent = text;
+            messageContainer.appendChild(message);
+
+            setTimeout(() => message.remove(), 5000);
+        }
+
+        function handleClick(e) {
+            const currentTime = Date.now();
+            const timeDiff = currentTime - lastClickTime;
+
+            if (timeDiff < 500) {
+                clickCount++;
+            } else {
+                clickCount = 1;
+            }
+
+            lastClickTime = currentTime;
+
+            const rect = mainText.getBoundingClientRect();
+            const x = e.clientX || rect.left + rect.width / 2;
+            const y = e.clientY || rect.top + rect.height / 2;
+
+            // Első kattintás
+            if (clickCount === 1) {
+                mainText.classList.add('pulse');
+                setTimeout(() => mainText.classList.remove('pulse'), 500);
+
+                for (let i = 0; i < 5; i++) {
+                    setTimeout(() => {
+                        createHeart(
+                            x + (Math.random() - 0.5) * 100,
+                            y + (Math.random() - 0.5) * 100
+                        );
+                    }, i * 100);
+                }
+
+                playSound(523.25, 0.2); // C5 - cuki pop hang
+            }
+
+            // Második kattintás
+            else if (clickCount === 2) {
+                body.style.background = 'linear-gradient(to bottom right, #FFB6C1, #DDA0DD, #E6E6FA)';
+                mainText.classList.add('rainbow');
+
+                createConfetti(x, y, 80, 1.2);
+                animateConfetti();
+
+                playSound(659.25, 0.3); // E5 - kellemes ding
+                setTimeout(() => playSound(783.99, 0.2), 100); // G5
+
+                setTimeout(() => {
+                    body.style.background = 'linear-gradient(to bottom right, #ffc0cb99, #e9d5ff99, #c7d2fe99)';
+                    mainText.classList.remove('rainbow');
+                }, 2000);
+            }
+
+            // Harmadik kattintás
+            else if (clickCount >= 3) {
+                const messages = [
+                    'Tudod, hogy itt vagyok neked? 💕',
+                    'Megoszthatod velem! ❤️',
+                    'Együtt könnyebb! 🌸',
+                    'Szeretlek, Manó! 💖'
+                ];
+
+                showMessage(messages[Math.floor(Math.random() * messages.length)]);
+
+                createConfetti(canvas.width / 2, 0, 200, 2);
+                animateConfetti();
+
+                // Győzelmi dallam
+                playSound(523.25, 0.15); // C5
+                setTimeout(() => playSound(659.25, 0.15), 150); // E5
+                setTimeout(() => playSound(783.99, 0.3), 300); // G5
+                setTimeout(() => playSound(1046.50, 0.4), 450); // C6
+
+                clickCount = 0;
+            }
+
+            // Vibrálás mobil eszközökön
+            if (navigator.vibrate) {
+                navigator.vibrate([50, 30, 50]);
+            }
+        }
+
+        mainText.addEventListener('click', handleClick);
+        mainText.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            handleClick(e.touches[0] || e.changedTouches[0]);
+        });
+
+        // Rázás detektálás mobilon
+        let lastX = 0, lastY = 0, lastZ = 0;
+        let shakeThreshold = 15;
+
+        if (window.DeviceMotionEvent) {
+            window.addEventListener('devicemotion', (e) => {
+                const acc = e.accelerationIncludingGravity;
+                const deltaX = Math.abs(acc.x - lastX);
+                const deltaY = Math.abs(acc.y - lastY);
+                const deltaZ = Math.abs(acc.z - lastZ);
+
+                if (deltaX + deltaY + deltaZ > shakeThreshold) {
+                    const randomEffect = Math.floor(Math.random() * 3) + 1;
+                    clickCount = randomEffect - 1;
+                    handleClick({ clientX: window.innerWidth / 2, clientY: window.innerHeight / 2 });
+                }
+
+                lastX = acc.x;
+                lastY = acc.y;
+                lastZ = acc.z;
+            });
+        }
+
+        // Ablak átméretezés kezelése
+        window.addEventListener('resize', () => {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        });
+    </script>
+</body>
+</html>
